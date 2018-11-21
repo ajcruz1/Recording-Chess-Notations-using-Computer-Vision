@@ -1,12 +1,14 @@
 #!/usr/bin/env
 
-import pprint
 import chess
 import chess.pgn
 import numpy as np
 import cv2 as cv
 import math
 import operator
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.firefox.options import Options
 
 ################################################
 # translate following methods
@@ -15,10 +17,42 @@ import operator
 # [/] boardRotations
 # [/] locateMove
 # implement following methods
-# [x] validateMove
-# [x] writeMove
+# [/] validateMove
+# [/] writeMove
 # [x] chessClock
 ################################################
+
+def findOptimalExposure(exposure, cap, perspective, fgbg, squares):
+	count = 0
+	while True:
+		for i in range(1,50):
+			ret, prevState = cap.read()
+
+		croppedP = cv.resize(prevState, (0,0), fx=0.33, fy=0.33)
+		croppedP = cv.warpPerspective(croppedP, perspective, (300,300))
+		
+		for i in range(1,30):
+			piecesP = fgbg.apply(croppedP,learningRate = 0)
+		piecesP[piecesP==127]=0
+		kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(9,9))
+		piecesP = cv.morphologyEx(piecesP, cv.MORPH_OPEN, kernel)
+		piecesP = cv.morphologyEx(piecesP, cv.MORPH_CLOSE, kernel)
+
+		cv.imshow('pieces', piecesP)
+		for key in squares:
+			square = piecesP[squares[key][0]:squares[key][1],squares[key][2]:squares[key][3]]
+			whitePixels = cv.countNonZero(square)
+			if(whitePixels > 250):
+				count = count + 1
+
+		if count == 32:
+			break
+		elif count > 32:
+			exposure.send_keys(Keys.RIGHT)
+		elif count < 32:
+			exposure.send_keys(Keys.LEFT)
+
+		count = 0
 
 def locateChessboard(corners):
 	tempx = corners[8][0][0] - corners[0][0][0]
@@ -117,7 +151,6 @@ def locateMove(img, squares):
 	counted = dict()
 
 	for key in squares:
-		print key
 		square = img[squares[key][0]:squares[key][1],squares[key][2]:squares[key][3]]
 		whitePixels = cv.countNonZero(square)
 		counted[key] = whitePixels
@@ -147,9 +180,23 @@ def validateMove(board, sorted_by_value, writer, node):
 	
 	return node
 
+def isGameOver(board, writer):
+	if board.is_checkmate():
+		print "Checkmate is found, would you like to save the game?"
+		ans = raw_input("Press [Y]es or [N]o")
+
+		if ans == 'Y':
+			file = open(writer.headers["Event"]+writer.headers["Date"]+writer.headers["Round"]+writer.headers["White"]+writer.headers["Black"], 'w')
+			print >>file, writer
+			file.close()
+
 # initialization of chess board
 # 'board' keeps track of the current state of the game
 # and will also be used to validate the moves later on
+options = Options()
+options.headless = True
+driver = webdriver.Firefox(options=options)
+
 board = chess.Board()
 writer = chess.pgn.Game()
 
@@ -157,6 +204,7 @@ writer = chess.pgn.Game()
 ipAdd = raw_input('Enter IP address of camera: ')
 # formats the address for it to be properly opened in opencv
 address = "http://" + ipAdd + ":8080/video"
+driver.get('http://' + ipAdd + ':8080')
 
 # opens the IP camera
 cap = cv.VideoCapture(address)
@@ -176,6 +224,7 @@ while(key != ord('\n')):
 
 cv.destroyWindow('chessboard')
 
+frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 frame = cv.resize(frame, (0,0), fx=0.33, fy=0.33)
 # looks for the inner chessboard corners of the chessboard
 found, corners = cv.findChessboardCorners(frame,(7,7))
@@ -200,34 +249,74 @@ if(found == True):
 cv.imshow('test', transformed)
 squares = defineSquares(corners)
 
+cv.waitKey(0)
 # initializes background for MOG
 print "Initializing background, this may take a few moments..."
 
-fgbg = cv.createBackgroundSubtractorMOG2()
+fgbg = cv.createBackgroundSubtractorMOG2(history = 1000, varThreshold = 30)
 
-for i in range(1,500):
+flashlight = driver.find_element_by_id('flashbtn')
+
+for i in range(1,250):
 	ret, bg = cap.read()
 	bg = cv.resize(bg, (0,0), fx=0.33, fy=0.33)
 	
 	croppedBG = cv.warpPerspective(bg,perspective,(300,300))
-
+	
 	cv.imshow('background', croppedBG)
-	check = fgbg.apply(croppedBG, learningRate = 0.1)
+	check = fgbg.apply(croppedBG, learningRate = 1.0/250)
+
+flashlight.click()
+for i in range(1,50):
+	ret, bg = cap.read()
+	
+for i in range(1,250):
+	ret, bg = cap.read()
+	bg = cv.resize(bg, (0,0), fx=0.33, fy=0.33)
+	
+	croppedBG = cv.warpPerspective(bg,perspective,(300,300))
+	cv.imshow('background', croppedBG)
+	check = fgbg.apply(croppedBG, learningRate = 1.0/250)
+
+flashlight.click()
+for i in range(1,50):
+	ret, bg = cap.read()
+
+for i in range(1,250):
+	ret, bg = cap.read()
+	bg = cv.resize(bg, (0,0), fx=0.33, fy=0.33)
+	
+	croppedBG = cv.warpPerspective(bg,perspective,(300,300))
+	
+	cv.imshow('background', croppedBG)
+	check = fgbg.apply(croppedBG, learningRate = 1.0/250)
+
+flashlight.click()
+for i in range(1,50):
+	ret, bg = cap.read()
+
+for i in range(1,250):
+	ret, bg = cap.read()
+	bg = cv.resize(bg, (0,0), fx=0.33, fy=0.33)
+	
+	croppedBG = cv.warpPerspective(bg,perspective,(300,300))
+	
+	cv.imshow('background', croppedBG)
+	check = fgbg.apply(croppedBG, learningRate = 1.0/250)
 
 print "Initalization done"
 
 key = 0
 while(key != ord('\n')):
 	ret, prevState = cap.read()
-	prevState = cv.resize(prevState, (0,0), fx=0.33, fy=0.33)
-
-	croppedP = cv.warpPerspective(prevState,perspective,(300,300))
-
 	cv.namedWindow('chessboard',cv.WINDOW_NORMAL)
 	cv.resizeWindow('chessboard',720,480)
-	cv.imshow('chessboard', croppedP)
-
+	cv.imshow('chessboard', prevState)
 	key = cv.waitKey(1)
+
+# resizes and crops image
+prevState = cv.resize(prevState, (0,0), fx=0.33, fy=0.33)
+croppedP = cv.warpPerspective(prevState,perspective,(300,300))
 
 # rotates the image to ensure that the black pieces are always at the top
 hsv = np.copy(croppedP)
@@ -237,12 +326,16 @@ cv.imshow('imgThreshold', imgThreshold)
 
 angle = boardRotations(imgThreshold, squares)
 
+exposure = driver.find_element_by_id('range_exposure')
+findOptimalExposure(exposure, cap, perspective, fgbg, squares)
+
 print "backsub"
-for i in range(1,10):
+for i in range(1,30):
 	piecesP = fgbg.apply(croppedP,learningRate = 0)
 piecesP[piecesP==127]=0
 kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(9,9))
 piecesP = cv.morphologyEx(piecesP, cv.MORPH_OPEN, kernel)
+piecesP = cv.morphologyEx(piecesP, cv.MORPH_CLOSE, kernel)
 
 croppedP[piecesP==0] = (255,0,0)
 print "done"
@@ -250,24 +343,32 @@ print "done"
 node = None
 while True:
 	key = 0
-	while(key != ord('\n')):
+	while True:
 		ret, currState = cap.read()
-		currState = cv.resize(currState, (0,0), fx=0.33, fy=0.33)
-
-		croppedC = cv.warpPerspective(currState,perspective,(300,300))
-
-		cv.namedWindow('chessboard',cv.WINDOW_NORMAL)
-		cv.resizeWindow('chessboard',720,480)
-		cv.imshow('chessboard', croppedC)
 
 		key = cv.waitKey(1)
+		if key == ord('\n') or key == ord('r') or key == ord('q'):
+			break
+
+	if key == ord('r'):
+		node = None
+		board = chess.Board()
+		writer = chess.pgn.Game()
+
+	if key == ord('q'):
+		break
+
+	# resizes and crops image
+	currState = cv.resize(currState, (0,0), fx=0.33, fy=0.33)
+	croppedC = cv.warpPerspective(currState,perspective,(300,300))
 
 	print "backsub"
-	for i in range(1,10):
+	for i in range(1,30):
 		piecesC = fgbg.apply(croppedC,learningRate = 0)
 	piecesC[piecesC==127]=0
 	kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(9,9))
 	piecesC = cv.morphologyEx(piecesC, cv.MORPH_OPEN, kernel)
+	piecesC = cv.morphologyEx(piecesC, cv.MORPH_CLOSE, kernel)
 	
 	croppedC[piecesC==0] = (255,0,0)
 	print "done"
@@ -277,6 +378,7 @@ while True:
 	diff = cv.threshold(diff, 25, 255, cv.THRESH_BINARY)[1]
 	kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(9,9))
 	diff = cv.morphologyEx(diff, cv.MORPH_OPEN, kernel)
+	diff = cv.morphologyEx(diff, cv.MORPH_CLOSE, kernel)
 	diff = cv.rotate(diff,angle)
 
 	# count number of non 0 pixels in the image
@@ -286,6 +388,7 @@ while True:
 
 	node = validateMove(board, sorted_by_value, writer, node)
 	print writer
+	isGameOver(board,writer)
 
 	cv.imshow('diff',diff)
 	cv.imshow('croppedC', croppedC)
@@ -293,7 +396,9 @@ while True:
 
 	croppedP = np.copy(croppedC)
 
-
 # When everything done, release the capture
 # cap.release()
+
+flashlight.click()
+driver.quit()
 cv.destroyAllWindows()
